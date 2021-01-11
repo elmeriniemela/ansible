@@ -82,6 +82,12 @@ options:
         send a 401, logins will fail.
     type: bool
     default: no
+  encoding_errors:
+    description:
+      - Handler for encoding errors. (see https://docs.python.org/3/library/codecs.html\#error-handlers)
+    type: str
+    choices: ['strict', 'ignore', 'replace', 'xmlcharrefreplace', 'backslashreplace', 'namereplace', 'surrogateescape']
+    default: strict
   follow_redirects:
     description:
       - Whether or not the URI module should follow redirects. C(all) will follow all redirects.
@@ -577,6 +583,7 @@ def main():
         src=dict(type='path'),
         method=dict(type='str', default='GET'),
         return_content=dict(type='bool', default=False),
+        encoding_errors=dict(type='str', default='strict', choices=['strict', 'ignore', 'replace', 'xmlcharrefreplace', 'backslashreplace', 'namereplace', 'surrogateescape']),
         follow_redirects=dict(type='str', default='safe', choices=['all', 'no', 'none', 'safe', 'urllib2', 'yes']),
         creates=dict(type='path'),
         removes=dict(type='path'),
@@ -602,6 +609,7 @@ def main():
     method = module.params['method'].upper()
     dest = module.params['dest']
     return_content = module.params['return_content']
+    encoding_errors = module.params['encoding_errors']
     creates = module.params['creates']
     removes = module.params['removes']
     status_code = [int(x) for x in list(module.params['status_code'])]
@@ -698,8 +706,13 @@ def main():
                 module.warn(
                     'Received multiple conflicting charset values (%s), using %s' % (', '.join(charsets), content_encoding)
                 )
-
-        u_content = to_text(content, encoding=content_encoding)
+        try:
+            u_content = to_text(content, encoding=content_encoding, errors=encoding_errors)
+        except LookupError:
+            if encoding_errors == 'ignore':
+                u_content = ''
+            else:
+                raise
         if any(candidate in content_type for candidate in JSON_CANDIDATES):
             try:
                 js = json.loads(u_content)
